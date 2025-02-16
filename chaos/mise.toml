@@ -1,0 +1,18 @@
+[tools]
+rust = "1.84.1"
+jq = "latest"
+
+[hooks]
+postinstall = "cargo install"
+
+[tasks]
+start = "cargo run"
+test = """
+response=$(curl -X POST http://127.0.0.1:3000/process_data \
+  -H "Content-Type: application/json" \
+  -d '{"data": ["Hello", 1, 5, "World", "!"]}')
+echo $response | jq
+echo $response | jq -e '.string_len == 11' > /dev/null
+echo $response | jq -e '.int_sum == 6' > /dev/null
+echo 'Tests passed!'
+"""
