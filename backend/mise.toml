@@ -1,0 +1,18 @@
+[tools]
+node = "23.8.0"
+
+[hooks]
+postinstall = "npm install --prefix ts_template"
+
+[tasks.start]
+run = "npm run start"
+dir = "ts_template"
+
+[tasks.test]
+depends = "test:install"
+run = "./test.sh"
+dir = "ts_template"
+
+[tasks."test:install"]
+run = "npm install"
+dir = "autotester"
