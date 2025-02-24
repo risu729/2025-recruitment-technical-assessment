@@ -11,6 +11,12 @@ If you don't manage to get this working we'll still want to hear about what you 
 
 > ANSWER BOX
 
+## Summary
+
+I hosted only the backend of the Matrix protocol using Conduwuit on an OCI instance with Ubuntu 24.04. I set up the SSL certificate using Let's Encrypt as it was required to connect to the server from app.element.io. Since I lacked knowledge about systemd, I struggled with the permission issues. Also, I initially tried to use Cloudflare proxy to configure port forwarding and SSL certificate, but it was not possible because the Cloudflare proxy doesn't allow port `8448`, which is required to federate with other servers. Finally I could send a direct message, but did many insecure things due to the lack of knowledge and time.
+
+## Logs
+
 Mainly just followed the instructions from Conduwuit [Generic deployment documentation](https://conduwuit.puppyirl.gay/deploying/generic.html).
 
 1. Make a VCN named `matrix` in OCI using the VCN Wizard. For ease, just use the default settings.
