@@ -117,8 +117,8 @@ Mainly just followed the instructions from Conduwuit [Generic deployment documen
 
     ReadWritePaths=/var/lib/conduwuit /etc/conduwuit
 
-    AmbientCapabilities=
-    CapabilityBoundingSet=
+    #AmbientCapabilities=
+    #CapabilityBoundingSet=
 
     DevicePolicy=closed
     LockPersonality=yes
@@ -137,7 +137,7 @@ Mainly just followed the instructions from Conduwuit [Generic deployment documen
     PrivateDevices=yes
     PrivateMounts=yes
     PrivateTmp=yes
-    PrivateUsers=yes
+    #PrivateUsers=yes
     PrivateIPC=yes
     RemoveIPC=yes
     RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
@@ -356,3 +356,146 @@ I checked the federation availability using [`Matrix federation tester`](https:/
 Hence, I need to forward or open port `8448` somehow.  
 I think the only way to achieve this is to disable Cloudflare proxy by setting the `matrix` subdomain to [DNS-only](https://developers.cloudflare.com/dns/proxy-status/#dns-only-records), then configure the SSL certificate for the origin.  
 I don't care much about the safety of the connection, but `app.element.io` requires HTTPS to connect to the server.
+
+1. Create a [Cloudflare Origin CA certificate](https://developers.cloudflare.com/ssl/origin-configuration/origin-ca/) for the domain `matrix.risunosu.com`:
+
+    - Generate private key and CSR with Cloudflare
+    - Private key type: `RSA (2048)`
+    - Hostnames: `matrix.risunosu.com`
+    - Certificate validity: `90 days`
+
+2. Copy generated private key and certificate to the instance:
+
+    ```bash
+    sudo nano /etc/conduwuit/matrix.risunosu.com.key
+    sudo nano /etc/conduwuit/matrix.risunosu.com.crt
+    ```
+
+3. Configure `/etc/conduwuit/conduwuit.toml` to use the certificate:
+
+    ```toml
+    [global.tls]
+
+    # Path to a valid TLS certificate file.
+    #
+    # example: "/path/to/my/certificate.crt"
+    #
+    certs = "/etc/conduit/matrix.risunosu.com.crt"
+
+    # Path to a valid TLS certificate private key.
+    #
+    # example: "/path/to/my/certificate.key"
+    #
+    key = "/etc/conduit/matrix.risunosu.com.key"
+    ```
+
+    Also, uncomment `trusted_servers = ["matrix.org"]` to allow gathering public keys.
+
+4. Use ports `443` and `8448` directly in the Conduwuit config and open the ports in iptables and OCI security list.
+
+5. Restart the Conduwuit service:
+
+    ```bash
+    sudo systemctl restart conduwuit
+    ```
+
+6. Remove the Configuration rule and Origin rule in Cloudflare, and set the `matrix` subdomain to [DNS-only](https://developers.cloudflare.com/dns/proxy-status/#dns-only-records).
+
+Then I tried to connect to the Conduwuit but I couldn't. To simplify the problem, I tried to connect to a simple web server with Bun, but I couldn't connect to it either with an SSL error:
+
+```plaintext
+curl: (60) SSL certificate problem: unable to get local issuer certificate
+More details here: https://curl.se/docs/sslcerts.html
+
+curl failed to verify the legitimacy of the server and therefore could not
+establish a secure connection to it. To learn more about this situation and
+how to fix it, please visit the web page mentioned above.
+```
+
+I could connect to the server with `curl -k` to ignore the SSL error, so it is a problem of the SSL certificate.  
+Then, I noticed that the Cloudflare Origin CA certificate is not trusted by default.
+
+> Site visitors may see untrusted certificate errors if you pause Cloudflare or disable proxying on subdomains that use Cloudflare origin CA certificates. These certificates only encrypt traffic between Cloudflare and your origin server, not traffic from client browsers to your origin.
+https://developers.cloudflare.com/ssl/origin-configuration/origin-ca/#3-change-ssltls-mode
+
+It was written clearly in the docs, but I didn't notice it. Since I need to disable proxying on the subdomain to use the port `8448`, I cannot use the Cloudflare Origin CA certificate.  
+The next alternative is to use Let's Encrypt, or to use the [OCI Certificates](https://www.oracle.com/au/security/cloud-security/ssl-tls-certificates/) service.  
+Since it seems to be a bit complicated to use OCI Certificates, I'll try to use Let's Encrypt.
+
+There are both [HTTP-01](https://letsencrypt.org/docs/challenge-types/#http-01-challenge) and [DNS-01](https://letsencrypt.org/docs/challenge-types/#dns-01-challenge) challenges to verify the ownership in the ACME standard.  
+For this case, I'll use the HTTP-01 challenge because I don't want to save the Cloudflare API token in the instance.  
+I'll use [Certbot](https://certbot.eff.org/) to get the certificate, so follow this [instruction](https://certbot.eff.org/instructions?ws=other&os=snap&tab=standard).
+
+1. Install Certbot:
+
+    ```bash
+    sudo apt-get remove certbot
+    sudo snap install --classic certbot
+    ```
+
+2. Open port `80` in iptables and OCI security list.
+
+3. Get the certificate:
+
+    ```bash
+    sudo certbot certonly --standalone
+    ```
+
+    ```plaintext
+    Successfully received certificate.
+    Certificate is saved at: /etc/letsencrypt/live/matrix.risunosu.com/fullchain.pem
+    Key is saved at:         /etc/letsencrypt/live/matrix.risunosu.com/privkey.pem
+    ```
+
+4. Configure `/etc/conduwuit/conduwuit.toml` to use the certificate:
+
+    ```toml
+    [global.tls]
+
+    # Path to a valid TLS certificate file.
+    #
+    # example: "/path/to/my/certificate.crt"
+    #
+    certs = "/etc/letsencrypt/live/matrix.risunosu.com/fullchain.pem"
+
+    # Path to a valid TLS certificate private key.
+    #
+    # example: "/path/to/my/certificate.key"
+    #
+    key = "/etc/letsencrypt/live/matrix.risunosu.com/privkey.pem"
+    ```
+
+5. Start the Conduwuit service:
+
+    ```bash
+    sudo systemctl restart conduwuit
+    ```
+
+However, I still couldn't connect to the server somehow. I could conect with port `8448` but not with `443`.  
+I tried to connect to the simple web server with Bun on port `443`, then I could connect to it.  
+Also, when I tried to run Conduwuit manually with `sudo /root/.local/share/mise/shims/conduwuit --config /etc/conduwuit/conduwuit.toml`, I could connect to the server with port `443`.  
+Since we need a special permission to use ports under `1024`, the problem is the systemd unit file.  
+I found that the `AmbientCapabilities` and `CapabilityBoundingSet` are set to empty in the systemd unit file, so I commented them out:
+
+```ini
+#AmbientCapabilities=
+#CapabilityBoundingSet=
+```
+
+However, it was not enough to solve the problem. I also need to comment out `PrivateUsers=yes`.  
+Then, I could connect to the server with port `443` as well.
+
+Finally, I sent a direct message to `@chino:oxn.sh` from `app.element.io` using the self-hosted Matrix server!  
+Since I'm doing many insecure things, I need to terminate the instance after the review.  
+Below is the screenshot of the direct message:
+
+![Direct message](./direct_message.png)
+
+The following list is the improvements I can make if I do this again:
+
+- Do not use mise-en-place for root user as it requires to use `sudo` for every command.
+- Use a reverse proxy not to give extra permissions to the Conduwuit service.
+- Create separate users for Conduwuit and Caddy.
+- Get the SSL certificate using OCI Certificates service to automate the renewal with minimal configuration in the instance.
+- Host the frontend of the Matrix protocol to avoid CORS issues as documented.
+- Edit `/etc/iptables/rules.v4` directly to avoid the issue of the order of the rules.

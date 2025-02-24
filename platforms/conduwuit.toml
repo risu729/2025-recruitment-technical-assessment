@@ -443,7 +443,7 @@ allow_encryption = true
 # Controls whether federation is allowed or not. It is not recommended to
 # disable this after the fact due to potential federation breakage.
 #
-#allow_federation = true
+allow_federation = true
 
 # This item is undocumented. Please contribute documentation for it.
 #
@@ -595,7 +595,7 @@ allow_encryption = true
 #
 # example: ["matrix.org", "envs.net", "constellatory.net", "tchncs.de"]
 #
-#trusted_servers = ["matrix.org"]
+trusted_servers = ["matrix.org"]
 
 # Whether to query the servers listed in trusted_servers first or query
 # the origin server first. For best security, querying the origin server
@@ -1563,13 +1563,13 @@ allow_encryption = true
 #
 # example: "/path/to/my/certificate.crt"
 #
-#certs =
+certs = "/etc/conduit/matrix.risunosu.com.crt"
 
 # Path to a valid TLS certificate private key.
 #
 # example: "/path/to/my/certificate.key"
 #
-#key =
+key = "/etc/conduit/matrix.risunosu.com.key"
 
 # Whether to listen and allow for HTTP and HTTPS connections (insecure!)
 #
