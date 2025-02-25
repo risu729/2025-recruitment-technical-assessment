@@ -33,16 +33,27 @@ Make sure to include foreign keys for the relationships that will `CASCADE` upon
 
 **Answer box:**
 ```sql
+CREATE TYPE question_type AS ENUM ('ShortAnswer', 'MultiSelect', 'MultiChoice');
+
 CREATE TABLE forms (
-    --     Add columns here
+    id SERIAL PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT
 );
 
 CREATE TABLE questions (
-    --     Add columns here
+    id SERIAL PRIMARY KEY,
+    form_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    question_type QUESTION_TYPE NOT NULL,
+    CONSTRAINT fk_form FOREIGN KEY (form_id) REFERENCES forms (id) ON DELETE CASCADE
 );
 
 CREATE TABLE question_options (
-    --     Add columns here
+    id SERIAL PRIMARY KEY,
+    question_id INTEGER NOT NULL,
+    option TEXT,
+    CONSTRAINT fk_question FOREIGN KEY (question_id) REFERENCES questions (id) ON DELETE CASCADE
 );
 ```
 
@@ -57,6 +68,18 @@ Using the above schema, write a (Postgres) SQL `SELECT` query to return all ques
 ```
 
 **Answer box:**
+
 ```sql
--- Write query here
+SELECT q.id,
+       q.form_id,
+       q.title,
+       q.question_type,
+       COALESCE(json_agg(o.option), '[null]') AS options
+FROM questions q
+LEFT JOIN question_options o ON q.id = o.question_id
+WHERE q.form_id = 26583
+GROUP BY q.id, q.form_id, q.title, q.question_type;
 ```
+
+The format of `options` will be wrong as it will be `["Rust", "JavaScript", "Python"]` instead of `{"Rust", "JavaScript", "Python"}`.
+I think I somehow configure the query to return in the correct format but I am not able to find a handy solution for this.
